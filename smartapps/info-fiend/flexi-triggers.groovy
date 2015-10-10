@@ -1,7 +1,7 @@
 /** FLEXi Triggers
 	
     
-	Version 1.2 (2015-5-5)
+	Version 1.2 (2015-7-16)
  
    The latest version of this file can be found at:
    https://github.com/infofiend/FLEXi_Lighting/FLEXi_Triggers
@@ -78,9 +78,6 @@ preferences {
 					["Warm", "Soft", "Normal", "Daylight", "Red", "Green", "Blue", "Yellow", "Orange", "Purple", "Pink"]], defaultValue: "Warm"
         input "defSwitch", "enum", title: "Default Switch State:", metadata: [values: ["yes", "no"]], required:true, defaultValue: "no"
 		input "defOffTime", "number", title: "Default No Motion OffTime (minutes):", required: true, defaultValue: 30 	        
-
-		input "optNOMotions", title: "For 'NO-Motion' events only:  Also check these Motion Sensors:", "capability.motionSensor", multiple: true, required: false
-   		input "optYESMotions", title: "For 'Motion' events only:  Also check these Motion Sensors:", "capability.motionSensor", multiple: true, required: false  
     }
 }
 
@@ -102,13 +99,6 @@ def updated()
 
 }
 
-/** def uninstalled()
-{
-	unschedule()
-	unsubscribe()
-  
-}
-**/
 
 def initialize()
 {
@@ -122,7 +112,7 @@ def initialize()
     subscribe(people, "presence", checkHome)
     
     if (hues) {
-    	levelCheck() 
+    	subscribe(hues, "switch.on", levelCheck) 
     }
     
     if (motions) {
@@ -131,31 +121,30 @@ def initialize()
     if (contacts) {
     	subscribe(contacts, "contact", contactHandler)
     }
-    if (optNOMotions) {
-    	subscribe(optMotions, "motion.inactive", motionHandler)
-    }
-    if (optYESMotions) {
-    	subscribe(optYESMotions, "motion.active", motionHandler)
-    }
+
 	if (abortToggle) {
     	subscribe(abortToggle, "momentary.pushed", abortHandler)       
     }
 	subscribe(location, onLocation)
 
 	colorCheck()
-	schedule("0 * * * * ?", "scheduleCheck")
+	setActiveAndSchedule()     // schedule ("0 * * * * ?", "scheduleCheck")
+
 }
 
 def checkOff() {   	// Wictor Wictor Niner
-	def foundOff = null
+    def offTime = defOffTime 
 
-	foundOff = hues.find{it.currentValue("sceneSwitch") == "Master"} 
+	def foundOff = hues.find{it.currentValue("sceneSwitch") == "Master"} 
 
-    log.debug "foundOff is ${foundOff}."
+    if (foundOff) {
+    	offTime = foundOff.currentValue("offTime") 
+		log.debug "The Master light is ${foundOff}.  Using the Offtime for that light."        
+    } else {
+		log.debug "No Master light found.  Using the default Offtime."    
+    }
     
-	def offTime = foundOff.currentValue("offTime") ?: defOffTime 
-     
-    return offTime
+    return offTime as Number
      
 
 }
@@ -271,20 +260,23 @@ def colorCheck() {
     
 }
 
-def levelCheck() {
-
+def levelCheck(evt) {
+	
    	log.debug "Reached levelCheck.  "
-	runEvery5Minutes(isThisIt)
-
-}
- 
-def isThisIt() {
-
-	hues?.each { 
-	    if (it.currentValue("level") == "100") {	      	
-    		log.debug "Detected manual switch used - adjusting to current Scene settings."
-        	turnON()
-        }
+    log.debug "event from physical actuation? ${evt.isPhysical()}"
+    def phyTest = evt.isPhysical()
+	if ( phyTest ) {
+/**	hues?.each { 
+    	it.poll()
+    	def curLevel = it.currentValue("level")
+    	log.debug "Light ${it.label} is level ${curLevel}."
+        if (curLevel == "100") {	      	
+    		log.debug "Detected manual switch used - adjusting ${it.label} to current Scene settings."
+**/
+		pause(1000)
+        turnON()
+        state.lastCheck = now()
+//        }
     }    
 }        
         
@@ -445,9 +437,16 @@ def motionHandler(evt) {
 		  	state.abortWindow = null
             
         } else if (evt.value == "inactive") {
-			log.trace "${theSensor.label} detected NO motion - setting state.inactiveAt to ${now}."    
-       	  	state.inactiveAt = now()
-           	setActiveAndSchedule()
+			log.trace "${theSensor.label} detected NO motion." 
+			state.inactiveAt = now()
+            log.trace "- setting state.inactiveAt to ${now}."    
+            
+       	  	if (state.timeOfAbort) {
+   	            log.trace "...but abort active."    
+            } else {
+   	            log.trace "....and running setActiveAndSchedule."    
+            	setActiveAndSchedule()
+            }
         }       			   
         
 	} else {
@@ -497,9 +496,7 @@ def onLocation(evt) {
 	state.currentMode = evt.value
     
     state.lastMode = state.currentMode
-	state.inactiveAt = now()
-  	state.abortWindow = null   
-	
+		
     def newOffTime = checkOff()
     
 	log.debug "Mode offTime is ${newOffTime}."
@@ -512,13 +509,13 @@ def onLocation(evt) {
 
 def setActiveAndSchedule() {
     unschedule("scheduleCheck")
-    def myOffTime = checkOff()
+    def myOffTime = checkOff() as Number
     def mySchTime = myOffTime * 15
     log.debug "setActiveAndSchedule:  myOffTime is ${myOffTime} and mySchTime is ${mySchTime}."
-/**    if (mySchTime < 300) {
+    if (mySchTime < 300) {
     	mySchTime = 300
     }    
-**/    
+    
     log.debug "setActiveAndSchedule: running scheduleCheck in ${mySchTime} seconds."    
 	runIn (mySchTime, "scheduleCheck")  // check monitored lights every 1/4 of offTime limit (in seconds) BUT no more than every 5 minutes	    
 }
@@ -527,23 +524,22 @@ def scheduleCheck() {
     log.debug "scheduleCheck:  "
     if(state.inactiveAt != null) {
 
-        def minutesOff = checkOff()
+        def minutesOff = checkOff() 
         log.debug "Mode offTime is ${minutesOff}."
 	    def elapsed = now() - state.inactiveAt
-	    def threshold = 60000 * minutesOff
+        def threshold = 60000 * minutesOff 
         log.debug "elapsed = ${elapsed} / threshold = ${threshold}."
 		
 
         if (elapsed >= threshold) {                     
-            
+            log.debug "elapsed = ${elapsed} / threshold = ${threshold}."
             
         	if (abortToggle && checkHome) {
             
             							// check for previous abort within abortLength minutes
 				if (noPrevAbort) {
 
-       				sendNotificationEvent("${motions.label}:  No Motion - will turn off lights unless Abort received within ${abortTime} minutes.") 
-		        	sendPush("ST Trig No Motion from ${motions.label}.")                 
+       				sendPush("ST Trig No Motion from ${motions.label} -- abort?") 
 					state.abortWindow = "Valid"        
         	        
                 	unschedule("turningOff")
@@ -552,26 +548,23 @@ def scheduleCheck() {
 			    
     	           	runIn (abortWindow, "turningOff")                            
                     
-                 } else {
-                 	log.debug "scheduleCheck:  Previous abort still active."
-	      	    	turningOff()                 
-                 }
+                } else {
+                 	log.debug "scheduleCheck:  Previous abort still active - do nothing."
+	      	    	                 
+                }
                 
    		    } else if (!checkHome) {
             	
-	           	log.debug "scheduleCheck:  No one home, so running turningOff() immediately."
+	           	log.debug "scheduleCheck:  No one home - turn off now."
       	    	turningOff()
         
            	} else if (!abortToggle) {
                             
-                log.debug "scheduleCheck:  no abortToggle within ${abortLength} minutes, so running turningOff() immediately."
+                log.debug "scheduleCheck:  no abortToggle found - turn off now."
 	            turningOff()
                     
         	}    
             
-	    } else {
-    
-			setActiveAndSchedule() 
     	}
     }    
 }
@@ -582,19 +575,20 @@ def noPrevAbort() {
     
     if (state.timeOfAbort) {    
 	
-    	def elapsed = now() - state.timeOfAbort
-		def threshold = 60000 * abortLength
-	    log.debug "elapsed = ${elapsed} / abort threshold = ${threshold}."
+    	def abElapsed = now() - state.timeOfAbort
+		def abThreshold = 60000 * abortLength
+//	    log.debug "elapsed = ${abElapsed} / abort threshold = ${abThreshold}."
 		
-    	if (elapsed >= threshold) {                     
+    	if (abElapsed >= abThreshold) {                     
 			result = true 
-		    log.debug "noPrevAbort is true."
+		
 		}
         
     } else {    
 		result = true 
+        
 	}
-    
+    log.debug "noPrevAbort is ${result}."
 	return result
 
 }
@@ -608,9 +602,11 @@ def abortHandler(evt) {
     
     	unschedule("turningOff")
 		state.abortWindow = null
-		sendNotificationEvent("Abort command received.  No Motion events cancelled for ${abortLength} minutes.")         
+		sendNotificationEvent("Abort received - will ignore No Motion events for ${abortLength} mins.")         
         log.trace "abortHandler:  Received abort command within the abortWindow.  Unscheduling turningOff()."
 		state.timeOfAbort = now()
+        
+        runIn (abortLength, "clearAbort") 
         
     } else {
     
@@ -619,6 +615,12 @@ def abortHandler(evt) {
     
 }
 
+def clearAbort() {
+
+	state.timeOfAbort = null
+    scheduleCheck()
+
+}
 
 def turningOff () {
 
@@ -656,7 +658,6 @@ private def STATE() {
     log.trace "settings: ${settings}"
     log.trace "state: ${state}"
 }
-
 
 
 
