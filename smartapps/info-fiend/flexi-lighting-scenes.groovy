@@ -4,10 +4,14 @@
  *
  *
  *
- *  Version 1.1 (2015-5-5)
+ *  Version 1.2 (2015-10-19)
  *
  *  The latest version of this file can be found at:
- *  https://github.com/infofiend/FLEXI_Lighting/Lighting_Scenes
+ *  https://github.com/infofiend/FLEXi_Lighting/blob/master/FLEXi_Scenes
+ * 
+ * 	or at
+ *
+ *  https://github.com/infofiend/SmartThings/blob/master/smartapps/info-fiend/flexi-lighting-scenes.groovy
  *
  *  --------------------------------------------------------------------------
  *
