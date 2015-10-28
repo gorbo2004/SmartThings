@@ -1,7 +1,7 @@
 /** FLEXi Triggers
 	
     
-	Version 1.2 (2015-7-16)
+	Version 1.3 (2015-10-28)
  
    The latest version of this file can be found at:
    https://github.com/infofiend/FLEXi_Lighting/FLEXi_Triggers
@@ -30,57 +30,246 @@ definition(
     name: "FLEXi Triggers",
     namespace: "info_fiend",
     author: "Anthony Pastor",
-   description: "If selected presence / virtual presence switch(es) (for virtual presence use device type FLEXiState) is ON,           " +
-    			 "this SmartApp will turn on the selected lights (use device types FLEXiHue, " +
-                 "FLEXiDimmer, and any type of basic switch).  This SmartApp will check the        " +
-                 "FLEXiHue and FLEXiDimmer devices for scene settings (stored by the FLEXi Lighting   " +
-                 "Scenes App) or manually-entered settings (entered in a FLEXi light's individual device tile.   " +
+   description: "Use this with the FLEXi Lighting Scenes smartapp to control FLEXi_Hue Device Type, " +
+   				"Flexi_Dimmer Device Type, and / or any simple on/off switches.  A presence device " +
+                "and/or a FlexiState Virtual Presence devices is needed." +
                  "         ---------------------------------------------------------------       " +
-                 "Once a triggering event occurs, the correct color and levels (from your Scene or Manual settings) " +
-                 "will be used.  In addition, the app asks the user for default settings to use, in the case " +
-                 "neither Scene or Manual settings can be found.                                                    " +
-                 "Finally, this SmartApp will turn off the lights based on the no-motion time limits (either from " +
-                 "the FLEXi Scenes app or from user's default settings in this app.",
+                 "Once a triggering event (motion or open contact) occurs, the correct color and levels " +
+                 "will be applied. " ,
     category: "Convenience",
+    parent: "info_fiend:FLEXi Lighting Scenes",
 	iconUrl: "https://dl.dropboxusercontent.com/u/2403292/Lightbulb.png",
     iconX2Url: "https://dl.dropboxusercontent.com/u/2403292/Lightbulb%20large.png")
 
 preferences {
-	section("All of these people need to be home:"){
-    
-		input "people", title: "People with Presence Devices:", "capability.presenceSensor", multiple: true, required: false
-		input "virtual", title: "Virtual Presence Switches:","device.flexistate", multiple: true, required: false
-	}
-    
-    section("Select motion detector(s) to check for BOTH 'Motion' and 'No Motion' events:"){
-		input "motions", "capability.motionSensor", multiple: true, required: false
-	}
-	section("Select contact sensor(s):"){
-		input "contacts", "capability.contactSensor", multiple: true, required: false
-	}
-    section("Select Hues, Dimmer Lights, and/or Switches to turn on..."){
-        input "hues", "device.flexihueBulb", multiple: true, title: "Select Hues", required: false
-		input "dimmers", "device.flexidimmer", multiple: true, title: "Select Dimmers", required: false        
-        input "switches", "capability.switch", multiple: true, title: "Select Switches", required: false
-	}
-    
-    section("User Abort Options", hideable:true, hidden: true) {
-        input "abortToggle", title: "Identify the No-Motion Off Abort Toggle", "capability.momentary", multiple: false, required: false  
-		input "abortTime", "number", title: "Check for abort for how many minutes?", multiple: false, required: true, defaultValue: 2  
-		input "abortLength", "number", title: "How long should No-Motion events be ignored upon Abort? (minutes):", multiple: false, required: true, defaultValue: 30  
-    }
-    
-    section("Other Options", hideable:true, hidden: true) {
-
-		input "wantPush", "enum", title: "Push mode change?", required: true, metadata: [values: ["yes", "no"]], defaultValue: "no" 
-		input "defLevel", "number", title: "Default Hue / Dimmer Level:", required: true, defaultValue: 99
-        input "defColor", "enum", title: "Default Hue Color:", required: true, multiple:false, metadata: [values:
-					["Warm", "Soft", "Normal", "Daylight", "Red", "Green", "Blue", "Yellow", "Orange", "Purple", "Pink"]], defaultValue: "Warm"
-        input "defSwitch", "enum", title: "Default Switch State:", metadata: [values: ["yes", "no"]], required:true, defaultValue: "no"
-		input "defOffTime", "number", title: "Default No Motion OffTime (minutes):", required: true, defaultValue: 30 	        
-    }
+    page name:"pageSettings"
+    page name:"pageOptions"    
 }
 
+
+private def	pageSettings() {
+
+    TRACE("pageSettings()")
+
+	def parentModes = []
+    parentModes = parent.sendChildTheModes()
+    log.debug "Parent Modes = ${parentModes}"
+    
+	def textSettings =	
+        "Select the Trigger Settings." +
+        "Next Page will provide additional options."
+
+
+	def pageProperties = [
+        name        : "pageSettings",
+        title       : "Choose Settings",
+        nextPage    : "pageOptions",
+        install     : false,
+        uninstall   : true
+	]
+
+	def inputModes = [
+        name        : "theModes",
+        type        : "mode",
+        title       : "Select the MODES (set up manually) that you want to use to control Lighting Scenes.  " +
+        				"IMPORTANT: Selecting 'All Modes' will cause this app to not work properly.  " +
+                        "Also - be sure to use only the Modes used in the parent Lighting App (or a subset thereof).",
+        multiple:   true,
+        required:   true
+    ]
+    
+	def inputPresence = [
+    	name        : "presence",
+        type        : "capability.presenceSensor",
+        title       : "Presence Sensors:",
+        multiple:   true,
+        required:   false
+    ]    
+       
+    def inputVirtual = [
+        name        : "virtual",
+        type        : "device.flexistate",
+        title       : "Virtual Presence Switches:",
+        multiple:   true,
+        required:   false
+    ]
+    
+    def inputMotions = [
+        name        : "motions",
+        type        : "capability.motionSensor",
+        title       : "Select motion detector(s):",
+        multiple:   true,
+        required:   false
+    ]
+    
+    def inputContacts = [
+        name        : "contacts",
+        type        : "capability.contactSensor",
+        title       : "Select contact detector(s):",
+        multiple:   true,
+        required:   false
+    ]
+
+	def inputHues = [
+        name        : "hues",
+        type        : "device.flexihueBulb",
+        title       : "Select FLEXiHue Bulbs(s):",
+        multiple:   true,
+        required:   false
+    ]
+    
+    def inputDimmers = [
+        name        : "dimmers",
+        type        : "device.flexidimmer",
+        title       : "Select FLEXiDimmer Lights(s):",
+        multiple:   true,
+        required:   false
+    ]
+    
+    def inputSwitches = [
+        name        : "switches",
+        type        : "capability.switch",
+        title       : "Select any other On/Off Switches:",
+        multiple:   true,
+        required:   false
+    ]
+        
+     return dynamicPage(pageProperties) {
+		section("Selection of Presence, Contact, and Motion Sensors", hideable:true, hidden: state.installed) {
+    		 paragraph textSettings 
+        }     
+    
+		section("1. Select Presence Sensors: ALL of these people need to be home:") {
+            input inputPresence
+            input inputVirtual
+        }
+        section("2. Select Motion Sensors: Motion on ANY will trigger lights:") {
+            input inputMotions
+        }
+        section("3. Select Contact Sensors: Open Contact on ANY will trigger lights:") {
+            input inputContacts
+        }
+        section("4. Select Lights Triggered by the Above:") {
+            input inputHues
+            input inputDimmers
+            input inputSwitches
+        }
+        section("5. Select Contact Sensors: Open Contact on ANY will trigger lights:") {
+     
+     		// input inputModes
+            
+//            input trigModes, type: "enum", title: "Select the modes (that are use in the Parent Lighting SmartApp) that THIS Trigger SmartApp will use:",
+//            options: parentModes, multiple: true, required: true //, refreshAfterSelection: true
+        	def m = location.mode
+			def myModes = []
+			parentModes.each {myModes << "$it"}
+            input "xModes", "enum", multiple: true, title: "Select mode(s)", submitOnChange: true, options: myModes.sort(), defaultValue: [m]
+    
+        }
+    }
+
+}
+
+private def	pageOptions() {
+
+    TRACE("pageOptions()")
+
+	def pageProperties = [
+        name        : "pageOptions",
+        title       : "Config Page 2: User Abort, Notification and Default Options",
+        nextPage    : null,
+        install     : true,
+        uninstall   : state.installed
+	]
+    
+    def inputAbortToggle = [
+        name        : "abortToggle",
+        type        : "capability.momentary",
+        title       : "Identify the No-Motion Off Abort Toggle:",
+        multiple:   false,
+        required:   false
+    ]
+    
+    def inputAbortTime = [
+        name        : "abortTime",
+        type        : "number",
+        title       : "How long should app check for abort (minutes)?",
+        multiple:   false,
+        required:   true,
+        defaultValue: 	2
+    ]
+    
+    def inputAbortLength = [
+        name        : "abortLength",
+        type        : "number",
+        title       : "How long should No-Motion events be ignored upon Abort? (minutes):",
+        multiple:   false,
+        required:   true,
+        defaultValue: 	30        
+    ]
+   
+	def inputDefLevel = [
+        name        : "defLevel",
+        type        : "number",
+        title       : "Default Hue / Dimmer Level:",
+        required:   true,
+        defaultValue: 	99        
+    ]
+    
+    def inputDefColor = [
+        name        : "defColor",
+        type        : "enum",
+        title       : "Default Hue Color (in case Trigger cannot find any other):",
+        multiple:   false,
+        required:   true,
+        metadata: [values:
+					["Warm", "Soft", "Normal", "Daylight", "Red", "Green", "Blue", "Yellow", "Orange", "Purple", "Pink"]], 
+        defaultValue: "Warm"
+    ]
+    
+    def inputDefSwitch = [
+        name        : "defSwitch",
+        type        : "enum",
+    title       : "Default Switch State:",
+        required:true, 
+        metadata: [values: ["yes", "no"]], 
+        defaultValue: "no",
+        multiple:   false
+    ]
+    
+   	def inputDefOffTime = [
+        name        : "defOffTime",
+        type        : "number",
+        title       : "Default amount of time to turn off lights after motion/contact event (minutes):",
+        required:   true,
+        defaultValue: 	30        
+    ]
+
+    return dynamicPage(pageProperties) {   
+    	
+        section([title:"1. Child App Label", mobileOnly:true]) {
+           	label title:"Assign a name", required:false, submitOnChange: true
+        }               
+        
+		section("2. User Abort Options", hideable:true, hidden: true) {
+            input inputAbortToggle
+            input inputAbortTime
+            input inputAbortLength            
+        }
+        
+        section("3. Default Light Settings", hideable:true, hidden: true) {
+            input inputDefLevel
+            input inputDefColor
+            input inputDefSwitch
+            input inputDefOffTime
+        }
+        
+
+    }
+
+}
+
+    
 
 def installed()
 {
@@ -108,6 +297,12 @@ def initialize()
 	state.allGroup = []   
 	state.offTime = defOffTime
     
+    state.theParentModes = parent.sendChildTheModes()   
+	log.debug "the Parent Modes are ${state.theParentModes}."
+	state.theChildModes = xModes
+	log.debug "the Child Modes are ${state.theChildModes}."
+    
+    
 	subscribe(virtual, "switch", checkHome)
     subscribe(people, "presence", checkHome)
     
@@ -133,7 +328,10 @@ def initialize()
 }
 
 def checkOff() {   	// Wictor Wictor Niner
-    def offTime = defOffTime 
+	def theCurMode = location.mode
+	def offTime = parent.sendChildOffInfo(theCurMode) 
+
+/**	def offTime = defOffTime 
 
 	def foundOff = hues.find{it.currentValue("sceneSwitch") == "Master"} 
 
@@ -143,9 +341,9 @@ def checkOff() {   	// Wictor Wictor Niner
     } else {
 		log.debug "No Master light found.  Using the default Offtime."    
     }
-    
-    return offTime as Number
-     
+**/
+
+    return offTime as Number    
 
 }
 
@@ -262,107 +460,107 @@ def colorCheck() {
 
 def levelCheck(evt) {
 	
-   	log.debug "Reached levelCheck.  "
-    log.debug "event from physical actuation? ${evt.isPhysical()}"
+//   	log.debug "Reached levelCheck.  "
+    
     def phyTest = evt.isPhysical()
 	if ( phyTest ) {
-/**	hues?.each { 
-    	it.poll()
-    	def curLevel = it.currentValue("level")
-    	log.debug "Light ${it.label} is level ${curLevel}."
-        if (curLevel == "100") {	      	
+		hues?.each { 
+//    		it.poll()
+//	    	def curLevel = it.currentValue("level")
+//    		log.debug "Light ${it.label} is level ${curLevel}."
+//        	if (curLevel == "100") {	      	
     		log.debug "Detected manual switch used - adjusting ${it.label} to current Scene settings."
-**/
-		pause(1000)
-        turnON()
-        state.lastCheck = now()
-//        }
+			
+	        def theLight = hues.find{it.id == evt.deviceId} 
+    	    log.trace "LevelCheck: The switch for ${theLight} was physically turned on."
+        
+			pause(1000)
+	        turnON()
+    	    state.lastCheck = now()
+        }
     }    
 }        
         
 
 def turnON() {							// YEAH, baby!
  
+	def theMode = location.mode as String // state.currentMode as String 
+    
  	def myScene = null
 	def masterLight = null    
 
     masterLight = hues.find{it.currentValue("sceneSwitch") == "Master"}
+      	log.debug "masterLight is ${masterLight}."
         
-    if (masterLight) {
-   	    state.masterLevel = masterLight.currentValue("sceneLevel") as Number ?: defLevel as Number
-		state.masterHue = masterLight.currentValue("sceneHue") as Number ?: state.defHue as Number            
-		state.masterSat = masterLight.currentValue("sceneSat") as Number ?: state.defSat as Number            
-/**	} else {
-        state.masterLevel = defLevel as Number
-        state.masterHue = state.defHue as Number
-        state.masterSat = state.defSat as Number
+	def masterName = masterLight.displayName
+      	log.debug "masterName is ${masterName}."        
         
-**/
-	}
-    
 	if (hues) {
 	
         hues?.each {
-            def myHueLevel = null                         
+           	def myHueLevel = null                         
             def scnHue = null
 			def scnSat = null
-            
-            if (it.currentValue("switch") == "off" && it.currentValue("level") > 0) {
-            
-            	log.debug "${it.label} is off and has a current level value of > 0.  Turning on using appropriate settings."
-            
-	            myScene = it.currentValue("sceneSwitch")
-            	log.debug "${it.label} sceneSwitch is ${myScene}."
+       	    def scnType = null
+                      
+            myScene = it.currentValue("sceneSwitch")
+           	log.debug "${it.label} sceneSwitch is ${myScene}."
                 
-				if ( myScene == "Master" || myScene == "Slave" ) {
+			if ( myScene == "Master" || myScene == "Slave" ) {
 
-	                myHueLevel = state.masterLevel as Number
-                   	log.debug "${it.label} sceneSwitch is ${myScene}."
+				def masterData = parent.sendChildMasterInfo(masterName, theMode) 
+                    	log.debug "${app.label}: turnON : masterData is ${masterData}."                        
+    
+                myHueLevel = masterData.level 
+                    	log.debug "${app.label}: turnON : masterData.level is ${masterData.level}."                        
+                        
+	            log.debug "${it.label} sceneSwitch is ${myScene}."
                     
-//                    if (myHueLevel > 0) {
-			   			scnHue = state.masterHue as Number
-						scnSat = state.masterSat as Number
-                    
-    		            def newValueColor = [hue: scnHue, saturation: scnSat, level: myHueLevel, transitiontime: 2]
-                        log.debug "${it.label} is using Master settings} - newValueColor is ${newValueColor}."
-    			        it.setColor(newValueColor)
-//					}	
-				} else if ( myScene == "Freebie") {
-            	    myHueLevel = it.currentValue("sceneLevel")             
-//                    if (myHueLevel > 0) {                    
-				   		scnHue = it.currentValue("sceneHue")    
-						scnSat = it.currentValue("sceneSat")
-        	              
-						def newValueColor = [hue: scnHue, saturation: scnSat, level: myHueLevel, transitiontime: 2]   		   			
-                        log.debug "${it.label} is Free - newValueColor is ${newValueColor}."                        
-	    	    	    it.setColor(newValueColor)
-//                	}
-				} else if ( myScene == "Manual" ) {
-					myHueLevel = it.currentValue("level")   		   			
-//                    if (myHueLevel > 0) {
-	            	    scnHue = it.currentValue("hue")    
-						scnSat = it.currentValue("saturation")
-					
-	    	            def newValueColor = [hue: scnHue, saturation: scnSat, level: myHueLevel, transitiontime: 2]   		   			
-                        log.debug "${it.label} is Manual - newValueColor is ${newValueColor}."                        
- 		    	        it.setColor(newValueColor)
-//					}
-	            } else { 
-					myHueLevel = defLevel as Number 
-//                    if (myHueLevel > 0) {                    
-	    	            scnHue = state.defHue as Number    
-						scnSat = state.defSat as Number    
 
-        	        	if (myHueLevel > 99) {
-            	       		myHueLevel = 99
-	            	    }    
-		            
-    	            	def newValueColor = [hue: scnHue, saturation: scnSat, level: myHueLevel, transitiontime: 2]
-                        log.debug "${it.label} is using default settings - ${newValueColor}."                        
-	 	    	        it.setColor(newValueColor)                    
-//					}
-            	}            
+	   			scnHue = masterData.hue 
+                    	log.debug "${app.label}: turnON : masterData.hue is ${masterData.hue}."                                        
+				scnSat = masterData.saturation 
+                    	log.debug "${app.label}: turnON : masterData.saturation is ${masterData.saturation}."                                        
+
+				scnType = "Master"
+
+            } else if ( myScene == "Freebie") {
+            
+				def freeData = parent.sendChildFreeInfo(it.displayName, theMode)
+                
+            myHueLevel = freeData.level as Number             
+
+	   			scnHue = freeData.hue as Number
+				scnSat = freeData.saturation as Number
+
+				scnType = "Free"
+
+			} else if ( myScene == "Manual" ) {
+
+				myHueLevel = it.currentValue("level")   		   			
+
+           	    scnHue = it.currentValue("hue")    
+				scnSat = it.currentValue("saturation")
+
+				scnType = "Manual"
+
+            } else { 
+				myHueLevel = defLevel as Number 
+
+  	            scnHue = state.defHue as Number    
+				scnSat = state.defSat as Number    
+
+   	        	if (myHueLevel > 99) {
+       	       		myHueLevel = 99
+           	    }    
+
+				scnType = "Default"		            
             }    
+            
+          	def newValueColor = [hue: scnHue, saturation: scnSat, level: myHueLevel, transitiontime: 2, switch: "on"]
+                log.debug "${it.label} is using ${scnType} settings of ${newValueColor}."                        
+  	        it.setColor(newValueColor)                    
+
 		}
     }
     
@@ -370,202 +568,247 @@ def turnON() {							// YEAH, baby!
             
        	dimmers?.each {
 			def myDimLevel = null        
-            
-	        if (it.currentValue("switch") == "off" &&  it.currentValue("level") > 0) {
-            	log.debug "${it.label} is off and has a current level value of > 0.  Turning on using appropriate settings."
-                             
-	            myScene = it.currentValue("sceneSwitch")
-            	log.debug "${it.label} sceneSwitch is ${myScene}."
+            def myDimType = null
+                                        
+	        myScene = it.currentValue("sceneSwitch")
+            log.debug "${it.label} sceneSwitch is ${myScene}."
                 
-				if ( myScene == "Master" || myScene == "Slave" ) {
+			if ( myScene == "Master" || myScene == "Slave" ) {
 	
-                    myDimLevel = state.masterLevel as Number
-//                    if (myDimLevel > 0) {
-                        log.debug "${it.label} is Master - myDimLevel is ${myDimLevel}."                    
-		                it.setLevel(myDimLevel)		                                
-//					}				
-				} else if ( myScene == "Freebie") {
+ 	            myDimLevel = parent.sendChildDimLevel(it.displayName, theMode) 
+				myDimType = "Master"              
+
+			} else if ( myScene == "Freebie") {
             					
-                    myDimLevel = it.currentValue("sceneLevel") 
-//                    if (myDimLevel > 0) {
-                        log.debug "${it.label} is Free - myDimLevel is ${myDimLevel}."                    
-		                it.setLevel(myDimLevel)		                                  
-//					}            
-				} else if ( myScene == "Manual" ) {
+                myDimLevel = it.currentValue("sceneLevel") 
+				myDimType = "Free"
+
+			} else if ( myScene == "Manual" ) {
             
-					myDimLevel = it.currentValue("level")   		   			
-//                    if (myDimLevel > 0) {             
-                        log.debug "${it.label} is Manual - myDimLevel is ${myDimLevel}."                    
-		                it.setLevel(myDimLevel)		            					
-//					}
-	            } else { 
+				myDimLevel = it.currentValue("level")   		   			
+				myDimType = "Manual"
+
+            } else { 
             	
-					myDimLevel = defLevel as Number 
-//                    if (myDimLevel > 0) {                    
-	                    if (myDimLevel > 99) {
-    	                	myDimLevel = 99
-        	            }    
-                        log.debug "${it.label} is using default settings - myDimLevel is ${myDimLevel}."                        
-	        	        it.setLevel(myDimLevel)		            
-//					}
-				}				
-            }           
+				myDimLevel = defLevel as Number 
+				myDimType = "Default"
+                
+	            if (myDimLevel > 99) {
+    	          	myDimLevel = 99
+        	    }    
+                
+			}
+			
+			log.debug "${it.label} is using ${myDimType} settings - myDimLevel is ${myDimLevel}."                        
+	        it.setLevel(myDimLevel)		            
+            
 		}
     }
 
 	if (switches) {
     	
   		switches?.each {
-    		if (it.currentValue("switch") == "off") {
-      			it.on()
-	      	}    
-		}
-        
+    		
+            if (it.currentValue("switch") == "off") {
+	            def theSwitchName = it.displayName as String
+//    	        def theMode = state.currentMode as String
+        	    theSwitchName = theSwitchName.tr(' !+', '___')
+            	log.debug "${app.label}: the switch ID is ${it.id} and its name is ${theSwitchName}."
+            
+				def theSwitchState = parent.sendChildSwitchState(theSwitchName, theMode)
+    	        log.debug "${app.label} retrieved ${theSwitchState} for ${theSwitchName}."
+            
+        	    if (theSwitchState == "yes") {
+      				it.on()
+		      	}    
+			}
+        }
 	}   
 }
 
 // Handle motion event.
 def motionHandler(evt) {
-	def theSensor = motions.find{it.id == evt.deviceId} // evt.deviceId
-	
-	if (checkHome) {
 
-	    if (evt.value == "active") {
-			log.trace "${theSensor.label} detected motion - resetting state.inactiveAt to null & calling turnON()."
-			state.inactiveAt = null
-            turnON()   
-		  	state.abortWindow = null
-            
-        } else if (evt.value == "inactive") {
-			log.trace "${theSensor.label} detected NO motion." 
-			state.inactiveAt = now()
-            log.trace "- setting state.inactiveAt to ${now}."    
-            
-       	  	if (state.timeOfAbort) {
-   	            log.trace "...but abort active."    
-            } else {
-   	            log.trace "....and running setActiveAndSchedule."    
-            	setActiveAndSchedule()
-            }
-        }       			   
+	def currentMode = location.mode
         
-	} else {
     
-		log.debug "Motion event, but checkHome is not true."
-    }    
+   	log.trace "${app.label}'s selected modes are ${xModes}.  Current mode is ${currentMode}." 
+
+    if ( xModes.contains(currentMode) ) {
+    	log.trace "onMotion:  Current mode of ${currentMode} is within ${app.label}'s selected modes}." 
+        
+		def theSensor = motions.find{it.id == evt.deviceId} // evt.deviceId
+	
+		if (checkHome) {
+
+	    	if (evt.value == "active") {
+				log.trace "${theSensor.label} detected motion - resetting state.inactiveAt to null & calling turnON()."
+				state.inactiveAt = null
+        	    turnON()   
+		  		state.abortWindow = null
+            
+	        } else if (evt.value == "inactive") {
+				log.trace "${theSensor.label} detected NO motion." 
+				state.inactiveAt = now()
+            	log.trace "- setting state.inactiveAt to ${now}."    
+            
+	       	  	if (state.timeOfAbort) {
+   		            log.trace "...but abort active."    
+        	    } else {
+   	        	    log.trace "....and running setActiveAndSchedule."    
+            		setActiveAndSchedule()
+	            }
+    	    }       			   
+        
+		} else {
+    
+			log.trace "Motion event, but checkHome is not true."
+	    }   
+        
+	} else {        
+    
+    	log.trace "onMotion:  Current mode of ${currentMode} is NOT within ${app.label}'s selected modes}." 
+	
+    }        
 }
 
 // Handle contact event.
 def contactHandler(evt) {
-	def theSensor = motions.find{it.id == evt.deviceId}
+	def currentMode = location.mode
+   	log.trace "${app.label}'s selected modes are ${xModes}.  Current mode is ${currentMode}." 
+
+    if ( xModes.contains(currentMode) ) {
+    	log.trace "onContact:  Current mode of ${currentMode} is within ${app.label}'s selected modes}." 
+
+		def theSensor = motions.find{it.id == evt.deviceId}
 	
-//	log.trace "${evt.deviceId} detected ${evt.value}."
-	if (checkHome) {
-	    if (evt.value == "open") {
-			log.trace "${theSensor.label} opened -- resetting state.inactiveAt to null & calling turnON()."
-			state.inactiveAt = null
-			turnON()   
-		  	state.abortWindow = null
+		if (checkHome) {
+	    	if (evt.value == "open") {
+				log.trace "${theSensor.label} opened -- resetting state.inactiveAt to null & calling turnON()."
+				state.inactiveAt = null
+				turnON()   
+			  	state.abortWindow = null
             
-    	} else {
-			log.trace "${theSensor.label} closed -- setting state.inactiveAt to ${now()}."        
-			// When contact closes, we reset the timer if not already set
+	    	} else {
+				log.trace "${theSensor.label} closed -- setting state.inactiveAt to ${now()}."        
+					// When contact closes, we reset the timer if not already set
  
- 			state.inactiveAt = now()
-        	setActiveAndSchedule()
-        }  
+ 				state.inactiveAt = now()
+        		setActiveAndSchedule()
+	        }  
 
-	} else {
+		} else {
     
-		log.debug "Contact event, but checkHome is not true."
+			log.debug "Contact event, but checkHome is not true."
 
-	}    
+		}    
+    } else {        
     
+    	log.trace "onContact:  Current mode of ${currentMode} is NOT within ${app.label}'s selected modes}." 
+	
+    }   
 }
 
 
 // Handle location event.
 def onLocation(evt) {
     
-    pause(500)
+    def currentMode = evt.value
+   	log.trace "${app.label}'s selected modes are ${xModes}.  Current mode is ${currentMode}." 
+
+    if ( xModes.contains(currentMode) ) {
     
-    if ( wantPush == "yes" ) {
-		sendPush("Mode change to ${evt.value}.")
-    }
-    
-	state.currentMode = evt.value
-    
-    state.lastMode = state.currentMode
+    	log.trace "onLocation:  Current mode of ${currentMode} is within ${app.label}'s selected modes}." 
+    	pause(500)
+    	
+    	state.lastMode = state.currentMode
+
+		state.currentMode = currentMode
+        
+	    state.theOffTime = checkOff()
 		
-    def newOffTime = checkOff()
+        state.inactiveAt = now()      
+        
+		log.debug "Mode offTime is ${state.theOffTime}."
+	    log.trace "NEW MODE: state.inactiveAt = ${state.inactiveAt} & calling setActiveAndSchedule()."    
+    	setActiveAndSchedule() 
+
+	} else {
     
-	log.debug "Mode offTime is ${newOffTime}."
-    log.trace "state.inactiveAt = ${now()} & calling setActiveAndSchedule()."    
-	setActiveAndSchedule() 
-
+       	log.trace "onLocation:  Current mode of ${currentMode} is NOT within ${app.label}'s selected modes}." 
+    
+    }
 }
-
 
 
 def setActiveAndSchedule() {
     unschedule("scheduleCheck")
-    def myOffTime = checkOff() as Number
-    def mySchTime = myOffTime * 15
+    
+    def myOffTime = checkOff() 
+    def mySchTime = myOffTime * 15		// check monitored lights every 1/4 of offTime limit (in seconds)
     log.debug "setActiveAndSchedule:  myOffTime is ${myOffTime} and mySchTime is ${mySchTime}."
-    if (mySchTime < 300) {
-    	mySchTime = 300
+    if (mySchTime < 120) {				// BUT check no more than every 2 minutes	    
+            mySchTime = 120
     }    
     
     log.debug "setActiveAndSchedule: running scheduleCheck in ${mySchTime} seconds."    
-	runIn (mySchTime, "scheduleCheck")  // check monitored lights every 1/4 of offTime limit (in seconds) BUT no more than every 5 minutes	    
+	runIn (mySchTime, "scheduleCheck")   
 }
 
 def scheduleCheck() {
     log.debug "scheduleCheck:  "
     if(state.inactiveAt != null) {
 
-        def minutesOff = checkOff() 
+        def minutesOff = checkOff() as Number 
         log.debug "Mode offTime is ${minutesOff}."
 	    def elapsed = now() - state.inactiveAt
         def threshold = 60000 * minutesOff 
-        log.debug "elapsed = ${elapsed} / threshold = ${threshold}."
-		
+        log.debug "elapsed = ${elapsed} / threshold = ${threshold}."		
 
         if (elapsed >= threshold) {                     
-            log.debug "elapsed = ${elapsed} / threshold = ${threshold}."
+            log.debug "elapsed > threshold.  Running turningOff."
             
-        	if (abortToggle && checkHome) {
-            
+    //    	if (abortToggle && checkHome) {
+//            if (checkHome) {
             							// check for previous abort within abortLength minutes
-				if (noPrevAbort) {
+//				if (noPrevAbort) {
 
-       				sendPush("ST Trig No Motion from ${motions.label} -- abort?") 
-					state.abortWindow = "Valid"        
+//       				sendPush("ST Trig No Motion from ${motions.label} -- abort?") 
+//					state.abortWindow = "Valid"        
         	        
-                	unschedule("turningOff")
-            	    def abortWindow = abortTime as Number
-	                abortWindow = abortWindow * 60            
+//                	unschedule("turningOff")
+//            	    def abortWindow = abortTime as Number
+//	                abortWindow = abortWindow * 60            
 			    
-    	           	runIn (abortWindow, "turningOff")                            
+//    	           	runIn (abortWindow, "turningOff")                            
                     
-                } else {
-                 	log.debug "scheduleCheck:  Previous abort still active - do nothing."
+//                } else {
+//                 	log.debug "scheduleCheck:  Previous abort still active - do nothing."
 	      	    	                 
-                }
+//                }
                 
-   		    } else if (!checkHome) {
+//   		    } else if (!checkHome) {
             	
-	           	log.debug "scheduleCheck:  No one home - turn off now."
+//	           	log.debug "scheduleCheck:  No one home - turn off now."
       	    	turningOff()
         
-           	} else if (!abortToggle) {
+//           	} else if (!abortToggle) {
                             
-                log.debug "scheduleCheck:  no abortToggle found - turn off now."
-	            turningOff()
+//                log.debug "scheduleCheck:  no abortToggle found - turn off now."
+//	            turningOff()
                     
-        	}    
+//        	}    
             
-    	}
+                } else {
+        
+                setActiveAndSchedule()
+        
+        }
+    } else {
+    
+    	state.inactiveAt = now()
+        setActiveAndSchedule()
+    
     }    
 }
 
