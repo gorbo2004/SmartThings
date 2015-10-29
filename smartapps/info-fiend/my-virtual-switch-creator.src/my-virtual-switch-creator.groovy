@@ -2,6 +2,8 @@
  *  My Virtual Switch (on/off or momentary) Creator
  *
  *  Copyright 2015 Anthony Pastor
+ *  Based in LARGE part on "Virtual On/Off Switch Creator" by Eric Roberts
+ *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -29,6 +31,7 @@ definition(
 preferences {
 	section("Create Virtual Switch") {
 		input "switchLabel", "text", title: "Switch Label", required: true
+        input "switchType", "enum", title: "Type: On/Off or Momentary?", multiple: false, required: true, metadata: [values: ["On/Off Button Tile", "Momentary Button Tile"]], defaultValue: "On/Off Button Tile"  
 	}
 }
 
@@ -49,9 +52,14 @@ def initialize() {
     def deviceId = app.id + "SimulatedSwitch"
     log.debug(deviceId)
     def existing = getChildDevice(deviceId)
-    if (!existing) {
-        def childDevice = addChildDevice("smartthings", "On/Off Button Tile", deviceId, null, [label: switchLabel])
-    }
+
+	if (!existing) {
+    	if (switchType == "On/Off Button Tile") {
+	    	def childDevice = addChildDevice("smartthings", "On/Off Button Tile", deviceId, null, [label: switchLabel])           
+	    } else {
+			def childDevice = addChildDevice("smartthings", "Momentary Button Tile", deviceId, null, [label: switchLabel])    
+	    }
+	}
 }
 
 def uninstalled() {

@@ -329,7 +329,8 @@ def initialize()
 
 def checkOff() {   	// Wictor Wictor Niner
 	def theCurMode = location.mode
-	def offTime = parent.sendChildOffInfo(theCurMode) 
+	def modeOffTime = parent.sendChildOffInfo(theCurMode) as Number
+    log.debug "checkOFF:  Parent Lighting App returned offTime of ${modeOffTime} for mode ${theCurMode}."
 
 /**	def offTime = defOffTime 
 
@@ -343,7 +344,7 @@ def checkOff() {   	// Wictor Wictor Niner
     }
 **/
 
-    return offTime as Number    
+    return modeOffTime  
 
 }
 
@@ -611,7 +612,6 @@ def turnON() {							// YEAH, baby!
     		
             if (it.currentValue("switch") == "off") {
 	            def theSwitchName = it.displayName as String
-//    	        def theMode = state.currentMode as String
         	    theSwitchName = theSwitchName.tr(' !+', '___')
             	log.debug "${app.label}: the switch ID is ${it.id} and its name is ${theSwitchName}."
             
@@ -691,7 +691,7 @@ def contactHandler(evt) {
             
 	    	} else {
 				log.trace "${theSensor.label} closed -- setting state.inactiveAt to ${now()}."        
-					// When contact closes, we reset the timer if not already set
+					// When contact closes, reset the timer if not already set
  
  				state.inactiveAt = now()
         		setActiveAndSchedule()
@@ -744,9 +744,11 @@ def onLocation(evt) {
 def setActiveAndSchedule() {
     unschedule("scheduleCheck")
     
-    def myOffTime = checkOff() 
+    def myOffTime = checkOff() as Number
+    state.myOffTime = myOffTime
+    log.debug "setActiveAndSchedule:  checkOff() sent ${myOffTime} as the offTime mins."
     def mySchTime = myOffTime * 15		// check monitored lights every 1/4 of offTime limit (in seconds)
-    log.debug "setActiveAndSchedule:  myOffTime is ${myOffTime} and mySchTime is ${mySchTime}."
+    log.debug "setActiveAndSchedule:  mySchTime (myOffTime * 15) is ${mySchTime}."
     if (mySchTime < 120) {				// BUT check no more than every 2 minutes	    
             mySchTime = 120
     }    
@@ -759,14 +761,14 @@ def scheduleCheck() {
     log.debug "scheduleCheck:  "
     if(state.inactiveAt != null) {
 
-        def minutesOff = checkOff() as Number 
-        log.debug "Mode offTime is ${minutesOff}."
+        def minutesOff = state.myOffTime as Number 
+        log.debug "scheduleCheck:  Mode offTime is ${minutesOff}."
 	    def elapsed = now() - state.inactiveAt
         def threshold = 60000 * minutesOff 
-        log.debug "elapsed = ${elapsed} / threshold = ${threshold}."		
+        log.debug "scheduleCheck: elapsed = ${elapsed} / threshold = ${threshold}."		
 
         if (elapsed >= threshold) {                     
-            log.debug "elapsed > threshold.  Running turningOff."
+            log.debug "scheduleCheck: elapsed > threshold.  Running turningOff."
             
     //    	if (abortToggle && checkHome) {
 //            if (checkHome) {
@@ -805,13 +807,14 @@ def scheduleCheck() {
         
         }
     } else {
-    
+    	log.debug "scheduleCheck:  state.inactiveAt is null, so setting it = now()."
     	state.inactiveAt = now()
         setActiveAndSchedule()
     
     }    
 }
 
+/**
 def noPrevAbort() {
 
 	def result = false
@@ -864,6 +867,8 @@ def clearAbort() {
     scheduleCheck()
 
 }
+
+**/
 
 def turningOff () {
 

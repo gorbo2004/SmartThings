@@ -4,7 +4,7 @@
  *
  *
  *
-*  Version 1.3 (2015-10-28)
+*  Version 1.4 (2015-10-28)
  *
  *  The latest version of this file can be found at:
  *  https://github.com/infofiend/FLEXi_Lighting/blob/master/FLEXi_Scenes
@@ -426,10 +426,10 @@ def sendChildDimLevel (String incomingName, String inMode) {
 
 def sendChildOffInfo (String inMode) {
 	log.debug "${app.label}: sendChildOffLevel received ${inMode}."
-//    String mode = inMode
- //   def modeName = inMode.tr(' !+', '___')
-//    def name = "${incomingName}_${mode.tr(' !+', '___')}"	
-	def sendOffTime = inMode + "_offTime"
+
+	String theMode = inMode.tr(' !+', '___')
+    
+	def sendOffTime = theMode + "_offTime"
     def sendOffValue = settings[sendOffTime] as Number
 
    	log.debug "${app.label} has an offTime of ${sendOffValue} for mode ${inMode}."
@@ -443,41 +443,39 @@ def sendChildMasterInfo (String incomingName, inMode) {
 	log.debug "${app.label}: sendChildMasterLevel received ${incomingName} and ${inMode}."
 	
     String mode = inMode
-//	log.debug "${app.label}: sendChildMasterLevel: mode is ${inMode}."
+
     
     def name = "${incomingName}_${mode.tr(' !+', '___')}"	
-//        log.debug "${app.label}: sendChildMasterLevel : incomingName is ${incomingName} and name is ${name}."
+
 	def nameLevel = name +"_HMlevel" as String                
-//		log.debug "${app.label}: sendChildMasterLevel : nameLevel is ${nameLevel}."
+
 	def valueLevel = settings[nameLevel]
-//    	log.debug "${app.label}: sendChildMasterLevel : valueLevel is ${valueLevel}."
+
     def newValueLevel = valueLevel 
 	if (newValueLevel > 99) {
         newValueLevel = 99             
 	}
-//    	log.debug "${app.label}: sendChildMasterLevel : newValueLevel is ${valueLevel}."
+
     
 	def nameColor = name +"_HMcolor" as String
-//    	log.debug "${app.label}: sendChildMasterLevel : nameColor is ${nameColor}."    
+
    	def valueColor = settings[nameColor]   		
-//    	log.debug "${app.label}: sendChildMasterLevel : valueColor is ${valueColor}."        
+
 	def newHue = state.defaultHue 
-//    	log.debug "${app.label}: sendChildMasterLevel : state.defaultHue is ${newHue}."        
+
  	def	newSat = state.defaultSat 
-//    	log.debug "${app.label}: sendChildMasterLevel : state.defaultSat is ${newSat}."                        
+
         
 	if (valueColor != null) {            
 
 		colorCheck(valueColor)
         newHue = state.theColorHue
-//	    	log.debug "${app.label}: sendChildMasterLevel : newHue is ${newHue}."                
         newSat = state.theColorSat
-// 	    	log.debug "${app.label}: sendChildMasterLevel : newSat is ${newSat}."                   			                   
+
 	}
 
 	def newValueColor = [hue: newHue, saturation: newSat, level: newValueLevel, transitiontime: 2, switch: on]
 
-//	    	log.debug "${app.label}: sendChildMasterLevel : newValueColor is ${newValueColor}."        
 	return newValueColor
 }
 
@@ -553,8 +551,6 @@ def setTheHueGroup(inMode) {
 
 
 	String mode = inMode
-
-//	log.debug ("Made it to setTheHueGroup.  Mode is ${mode}.")
 
 	def name = "${hueMaster.displayName}_${mode.tr(' !+', '___')}" as String
 
@@ -734,9 +730,8 @@ def setTheFreeHues(inMode) {
         it.saveScene(newValueColor, mode, offTime)
 	    log.debug "Free ${it.label} newValueLevel is ${newValueLevel}, valueTrig is ${valueTrig}, and is currently ${it.currentValue('switch')}."                                
         
-	// -- and use those settings IF Level=0, light is already on, or Scene Trigger.	
+	// -- and use those settings *IF* levelof light is currently > 0 or Scene Trigger is 'Yes'.	
         if (it.currentValue("level") > 0 ) {    
-       		// newValueColor.switch == "off"
 			it.setColor(newValueColor)	
            
 	        log.debug "Past level > 0, so immediately setting Free ${it.label} to ${newValueColor}."                    
@@ -849,7 +844,7 @@ def setTheFreeDimmers(inMode) {
         it.saveScene(newScene, mode, offTime)
 	    log.debug "Free ${it.label} newValueLevel is ${newValueLevel}, valueTrig is ${valueTrig}, and is currently ${it.currentValue('switch')}."
         
-	// -- and use those settings IF Level=0, light is already on, or Scene Trigger.    	
+	// -- and use those settings *IF* levelof light is currently > 0 or Scene Trigger is 'Yes'.	
         
         if (it.currentValue("level") > 0 ) {
 			
